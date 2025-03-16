@@ -1,175 +1,263 @@
-import pandas as pd
+import sys
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
-import cohere
+import matplotlib.pyplot as plt
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_absolute_error
+import cohere
 
-# Initialize Cohere AI (Replace with your actual API key)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget,
+                             QLineEdit, QTextEdit, QMessageBox, QHBoxLayout, QFrame)
+from PyQt5.QtGui import QFont, QIcon
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+# Initialize Cohere Client
 co = cohere.Client('KTn7ndyWTyFbx9yGwzrS27JYOy0TRjttcObYzk5t')
 
-# ------------------------- Step 1: User Input for Business Type -------------------------
-business_type = input("Enter the business type (e.g., E-commerce, Retail, SaaS, Finance, etc.): ").strip()
+class DashboardCanvas(FigureCanvas):
+    """Matplotlib canvas integrated into PyQt"""
+    def __init__(self, parent=None, width=10, height=6, dpi=100):
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+        super(DashboardCanvas, self).__init__(fig)
 
-# ------------------------- Step 2: Sample Dataset -------------------------
-data = {
-    "customer_id": range(1, 21),
-    "total_spent": np.random.randint(500, 150000, size=20),  
-    "purchase_frequency": np.random.randint(1, 50, size=20),  
-    "last_purchase_days": np.random.randint(1, 180, size=20),  
-    "customer_age": np.random.randint(18, 70, size=20),  
-    "location": np.random.choice(["Urban", "Suburban", "Rural"], size=20),  
-    "avg_basket_size": np.random.randint(1, 10, size=20),  
-    "last_review_rating": np.random.randint(1, 6, size=20)  
-}
+class BusinessAnalyzer(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("📊 AI-Powered Business Analytics Dashboard")
+        self.setGeometry(100, 100, 1200, 800)
 
-df = pd.DataFrame(data)
+        # Set a modern color scheme
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QLabel {
+                font-size: 14px;
+                color: #333333;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 5px;
+                padding: 10px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QLineEdit, QTextEdit {
+                border: 1px solid #cccccc;
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 14px;
+            }
+            QTextEdit {
+                background-color: #ffffff;
+                color: #000000;
+            }
+        """)
 
-# ------------------------- Step 3: Data Analysis -------------------------
-def analyze_data(df):
-    """Calculate key business metrics."""
-    return {
-        "avg_spent": df["total_spent"].mean(),
-        "avg_frequency": df["purchase_frequency"].mean(),
-        "churn_rate": (df["last_purchase_days"] > 90).mean() * 100,
-        "high_basket_customers": (df["avg_basket_size"] > 5).sum(),
-        "low_rated_customers": (df["last_review_rating"] < 3).sum()
-    }
+        # DataFrame Initialization
+        self.df = self.create_sample_data()
 
-# ------------------------- Step 4: Optimized Customer Segmentation -------------------------
-def segment_customers(df):
-    """Efficient customer segmentation using MiniBatchKMeans."""
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(df[["total_spent", "purchase_frequency", "avg_basket_size"]])
+        # Widgets
+        self.business_label = QLabel("Enter Business Type:")
+        self.business_input = QLineEdit()
+        self.analyze_button = QPushButton("Analyze & Generate Insights")
+        self.analyze_button.clicked.connect(self.run_analysis)
 
-    kmeans = MiniBatchKMeans(n_clusters=3, random_state=42, n_init=10, batch_size=5)
-    df["segment"] = kmeans.fit_predict(scaled_data)
+        self.insights_box = QTextEdit()
+        self.insights_box.setReadOnly(True)
 
-    segment_labels = {
-        0: "High-Value Customers",
-        1: "Frequent Shoppers",
-        2: "At-Risk Customers"
-    }
+        self.ai_question_input = QLineEdit()
+        self.ai_question_input.setPlaceholderText("Ask AI a Business-Specific Question")
+        self.ai_answer_button = QPushButton("Ask AI")
+        self.ai_answer_button.clicked.connect(self.ask_ai)
 
-    df["segment_label"] = df["segment"].map(segment_labels)
-    return df
+        self.dashboard_canvas = DashboardCanvas(self, width=10, height=6)
 
-# ------------------------- Step 5: Predictive Analytics -------------------------
-def predict_spending(df):
-    """Predict future spending based on purchase frequency."""
-    X = df[["purchase_frequency"]].values
-    y = df["total_spent"].values
+        # Header
+        header = QLabel("AI-Powered Business Analytics Dashboard")
+        header.setFont(QFont("Arial", 18, QFont.Bold))
+        header.setStyleSheet("color: #4CAF50;")
 
-    model = LinearRegression()
-    model.fit(X, y)
+        # Footer
+        footer = QLabel("© 2023 Business Analytics Inc. | All Rights Reserved")
+        footer.setFont(QFont("Arial", 10))
+        footer.setStyleSheet("color: #777777;")
 
-    y_pred = model.predict(X)
-    return {
-        "model": model,
-        "r2": r2_score(y, y_pred),
-        "mae": mean_absolute_error(y, y_pred),
-        "prediction": model.predict([[20]])[0]
-    }
+        # Layout
+        layout = QVBoxLayout()
+        layout.addWidget(header)
+        layout.addWidget(self.business_label)
+        layout.addWidget(self.business_input)
+        layout.addWidget(self.analyze_button)
+        layout.addWidget(QLabel("📄 Key Insights:"))
+        layout.addWidget(self.insights_box)
+        layout.addWidget(self.ai_question_input)
+        layout.addWidget(self.ai_answer_button)
+        layout.addWidget(QLabel("📈 Dashboard Visualization:"))
+        layout.addWidget(self.dashboard_canvas)
+        layout.addWidget(footer)
 
-# ------------------------- Step 6: AI-Powered Business Insights -------------------------
-def generate_ai_insights(metrics, business_type, question=None):
-    """Generate precise AI insights tailored to the business type."""
-    prompt = f"""Analyze this {business_type} customer dataset:
-    - Average Spending: ₹{metrics['avg_spent']:,.0f}
-    - Purchase Frequency: {metrics['avg_frequency']:.1f} times
-    - Churn Risk: {metrics['churn_rate']:.1f}%
-    - High Basket Size Customers: {metrics['high_basket_customers']}
-    - Customers with Low Ratings: {metrics['low_rated_customers']}
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
 
-    Provide 3 precise data-driven strategies to:
-    - Increase customer retention
-    - Maximize revenue growth
-    - Improve customer satisfaction"""
+    def create_sample_data(self):
+        data = {
+            "customer_id": range(1, 21),
+            "total_spent": np.random.randint(500, 150000, size=20),
+            "purchase_frequency": np.random.randint(1, 50, size=20),
+            "last_purchase_days": np.random.randint(1, 180, size=20),
+            "customer_age": np.random.randint(18, 70, size=20),
+            "location": np.random.choice(["Urban", "Suburban", "Rural"], size=20),
+            "avg_basket_size": np.random.randint(1, 10, size=20),
+            "last_review_rating": np.random.randint(1, 6, size=20)
+        }
+        return pd.DataFrame(data)
 
-    if question:
-        prompt += f"\n\nUser's Question: {question}\nProvide a detailed and industry-specific response."
+    def run_analysis(self):
+        business_type = self.business_input.text().strip()
+        if not business_type:
+            QMessageBox.warning(self, "Input Error", "Please enter a business type.")
+            return
 
-    try:
-        response = co.generate(
-            model='command',
-            prompt=prompt,
-            max_tokens=400,
-            temperature=0.5
-        )
-        return response.generations[0].text.strip()
-    except Exception as e:
-        return f"AI Insights temporarily unavailable. Error: {str(e)}"
+        # Data Analysis
+        metrics = self.analyze_data(self.df)
+        self.df = self.segment_customers(self.df)
+        model_data = self.predict_spending(self.df)
 
-# ------------------------- Step 7: Dashboard Visualization (6 Graphs) -------------------------
-def visualize_dashboard(df, metrics):
-    """Generate customer insights dashboard with 6 graphs."""
-    plt.figure(figsize=(18, 10))
-    plt.suptitle(f"Customer Analytics Dashboard for {business_type}", fontsize=18)
+        # Display Key Insights
+        insights = f"Business Type: {business_type}\n"
+        insights += f"Average Spending: ₹{metrics['avg_spent']:,.2f}\n"
+        insights += f"Purchase Frequency: {metrics['avg_frequency']:.1f} times/customer\n"
+        insights += f"Churn Risk: {metrics['churn_rate']:.1f}%\n"
+        insights += f"R-squared: {model_data['r2']:.2f} | MAE: ₹{model_data['mae']:,.2f}\n"
+        insights += f"Projected Spending for 20 Purchases: ₹{model_data['prediction']:,.2f}\n"
 
-    # 1. Customer Segmentation Pie Chart
-    plt.subplot(2, 3, 1)
-    df.segment_label.value_counts().plot.pie(autopct='%1.1f%%', colors=['skyblue', 'orange', 'lightgreen'])
-    plt.title("Customer Segmentation")
+        # AI Recommendations
+        ai_text = self.generate_ai_insights(metrics, business_type)
+        insights += "\n📌 AI Recommendations:\n" + ai_text
 
-    # 2. Spending vs Purchase Frequency Scatter Plot
-    plt.subplot(2, 3, 2)
-    sns.scatterplot(x=df["purchase_frequency"], y=df["total_spent"], hue=df["segment_label"], palette="Set2", s=100)
-    plt.title("Spending vs Purchase Frequency")
-    plt.xlabel("Monthly Purchases")
-    plt.ylabel("Total Spent (₹)")
+        self.insights_box.setPlainText(insights)
+        self.plot_dashboard(self.df, business_type)
 
-    # 3. Bar Chart for Customer Locations
-    plt.subplot(2, 3, 3)
-    sns.countplot(x=df["location"], palette="coolwarm")
-    plt.title("Customer Location Distribution")
+    def analyze_data(self, df):
+        return {
+            "avg_spent": df["total_spent"].mean(),
+            "avg_frequency": df["purchase_frequency"].mean(),
+            "churn_rate": (df["last_purchase_days"] > 90).mean() * 100,
+            "high_basket_customers": (df["avg_basket_size"] > 5).sum(),
+            "low_rated_customers": (df["last_review_rating"] < 3).sum()
+        }
 
-    # 4. Bar Chart for Customer Age Groups
-    plt.subplot(2, 3, 4)
-    sns.histplot(df["customer_age"], bins=5, kde=True, color="purple")
-    plt.title("Customer Age Distribution")
+    def segment_customers(self, df):
+        scaler = StandardScaler()
+        scaled_data = scaler.fit_transform(df[["total_spent", "purchase_frequency", "avg_basket_size"]])
 
-    # 5. Bar Chart for Average Basket Size
-    plt.subplot(2, 3, 5)
-    sns.histplot(df["avg_basket_size"], bins=5, kde=True, color="green")
-    plt.title("Average Basket Size Distribution")
+        kmeans = MiniBatchKMeans(n_clusters=3, random_state=42, n_init=10, batch_size=5)
+        df["segment"] = kmeans.fit_predict(scaled_data)
 
-    # 6. Customer Satisfaction (Ratings)
-    plt.subplot(2, 3, 6)
-    sns.countplot(x=df["last_review_rating"], palette="magma")
-    plt.title("Customer Satisfaction Ratings")
+        segment_labels = {
+            0: "High-Value Customers",
+            1: "Frequent Shoppers",
+            2: "At-Risk Customers"
+        }
+        df["segment_label"] = df["segment"].map(segment_labels)
+        return df
 
-    plt.tight_layout()
-    plt.show()
+    def predict_spending(self, df):
+        X = df[["purchase_frequency"]].values
+        y = df["total_spent"].values
 
-# ------------------------- Main Execution -------------------------
+        model = LinearRegression()
+        model.fit(X, y)
+        y_pred = model.predict(X)
+
+        return {
+            "model": model,
+            "r2": r2_score(y, y_pred),
+            "mae": mean_absolute_error(y, y_pred),
+            "prediction": model.predict([[20]])[0]
+        }
+
+    def generate_ai_insights(self, metrics, business_type, question=None):
+        prompt = f"""Analyze this {business_type} customer dataset:
+        - Average Spending: ₹{metrics['avg_spent']:,.0f}
+        - Purchase Frequency: {metrics['avg_frequency']:.1f} times
+        - Churn Risk: {metrics['churn_rate']:.1f}%
+        - High Basket Size Customers: {metrics['high_basket_customers']}
+        - Customers with Low Ratings: {metrics['low_rated_customers']}
+
+        Provide 3 precise data-driven strategies to:
+        - Increase customer retention
+        - Maximize revenue growth
+        - Improve customer satisfaction"""
+        if question:
+            prompt += f"\n\nUser's Question: {question}\nProvide a detailed and industry-specific response."
+
+        try:
+            response = co.generate(
+                model='command',
+                prompt=prompt,
+                max_tokens=400,
+                temperature=0.5
+            )
+            return response.generations[0].text.strip()
+        except Exception as e:
+            return f"AI Insights temporarily unavailable. Error: {str(e)}"
+
+    def ask_ai(self):
+        question = self.ai_question_input.text().strip()
+        if not question:
+            QMessageBox.warning(self, "Input Error", "Please type a question.")
+            return
+        business_type = self.business_input.text().strip()
+        metrics = self.analyze_data(self.df)
+        ai_response = self.generate_ai_insights(metrics, business_type, question)
+        QMessageBox.information(self, "AI Response", ai_response)
+
+    def plot_dashboard(self, df, business_type):
+        self.dashboard_canvas.figure.clear()
+        axes = self.dashboard_canvas.figure.subplots(2, 3)
+
+        # Pie Chart - Customer Segmentation
+        df.segment_label.value_counts().plot.pie(autopct='%1.1f%%', ax=axes[0, 0], colors=['skyblue', 'orange', 'lightgreen'])
+        axes[0, 0].set_title("Customer Segmentation", fontsize=12, fontweight='bold')
+        axes[0, 0].set_ylabel("")
+
+        # Scatter Plot - Spending vs Purchase Frequency
+        sns.scatterplot(x=df["purchase_frequency"], y=df["total_spent"], hue=df["segment_label"], palette="Set2", s=100, ax=axes[0, 1])
+        axes[0, 1].set_title("Spending vs Purchase Frequency", fontsize=12, fontweight='bold')
+        axes[0, 1].set_xlabel("Monthly Purchases", fontsize=10)
+        axes[0, 1].set_ylabel("Total Spent (₹)", fontsize=10)
+
+        # Bar Chart - Locations
+        sns.countplot(x=df["location"], palette="coolwarm", ax=axes[0, 2])
+        axes[0, 2].set_title("Customer Location Distribution", fontsize=12, fontweight='bold')
+
+        # Histogram - Age
+        sns.histplot(df["customer_age"], bins=5, kde=True, color="purple", ax=axes[1, 0])
+        axes[1, 0].set_title("Customer Age Distribution", fontsize=12, fontweight='bold')
+
+        # Histogram - Basket Size
+        sns.histplot(df["avg_basket_size"], bins=5, kde=True, color="green", ax=axes[1, 1])
+        axes[1, 1].set_title("Average Basket Size Distribution", fontsize=12, fontweight='bold')
+
+        # Bar Chart - Review Ratings
+        sns.countplot(x=df["last_review_rating"], palette="magma", ax=axes[1, 2])
+        axes[1, 2].set_title("Customer Satisfaction Ratings", fontsize=12, fontweight='bold')
+
+        self.dashboard_canvas.draw()
+
 if __name__ == "__main__":
-    # Run analysis
-    metrics = analyze_data(df)
-    df = segment_customers(df)
-    model_data = predict_spending(df)
-
-    # Display Key Insights
-    print(f"\nLive Insights for {business_type} Business\n")
-    print(f"Average Spending: ₹{metrics['avg_spent']:,.2f}")
-    print(f"Purchase Frequency: {metrics['avg_frequency']:.1f} times/customer")
-    print(f"Churn Risk: {metrics['churn_rate']:.1f}%\n")
-
-    print("\nPredictive Analytics\n")
-    print(f"R-squared: {model_data['r2']:.2f} | MAE: ₹{model_data['mae']:,.2f}")
-    print(f"Projected Spending for 20 Purchases: ₹{model_data['prediction']:,.2f}\n")
-
-    # AI Insights
-    ai_recommendations = generate_ai_insights(metrics, business_type)
-    print("\nAI-Powered Recommendations:\n")
-    print(ai_recommendations)
-
-    # AI Q&A
-    user_question = input("\nAsk AI a business-specific question: ")
-    ai_answer = generate_ai_insights(metrics, business_type, user_question)
-    print("\nAI Response:\n", ai_answer)
-
-    # Show Dashboard with 6 Graphs
-    visualize_dashboard(df, metrics)
+    app = QApplication(sys.argv)
+    window = BusinessAnalyzer()
+    window.show()
+    sys.exit(app.exec_())
