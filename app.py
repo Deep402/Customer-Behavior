@@ -9,9 +9,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_absolute_error
 import cohere
 
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget,
-                             QLineEdit, QTextEdit, QMessageBox, QHBoxLayout, QFrame)
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QLineEdit, QTextEdit, QMessageBox, QHBoxLayout, QGridLayout, QSizePolicy
+)
+from PyQt5.QtGui import QFont
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -65,49 +67,62 @@ class BusinessAnalyzer(QMainWindow):
         # DataFrame Initialization
         self.df = self.create_sample_data()
 
-        # Widgets
-        self.business_label = QLabel("Enter Business Type:")
-        self.business_input = QLineEdit()
-        self.analyze_button = QPushButton("Analyze & Generate Insights")
-        self.analyze_button.clicked.connect(self.run_analysis)
+        # Main Widget
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
 
-        self.insights_box = QTextEdit()
-        self.insights_box.setReadOnly(True)
-
-        self.ai_question_input = QLineEdit()
-        self.ai_question_input.setPlaceholderText("Ask AI a Business-Specific Question")
-        self.ai_answer_button = QPushButton("Ask AI")
-        self.ai_answer_button.clicked.connect(self.ask_ai)
-
-        self.dashboard_canvas = DashboardCanvas(self, width=10, height=6)
+        # Main Layout
+        self.main_layout = QVBoxLayout(self.central_widget)
 
         # Header
         header = QLabel("AI-Powered Business Analytics Dashboard")
         header.setFont(QFont("Arial", 18, QFont.Bold))
         header.setStyleSheet("color: #4CAF50;")
+        self.main_layout.addWidget(header)
+
+        # Input Section
+        self.business_label = QLabel("Enter Business Type:")
+        self.business_input = QLineEdit()
+        self.analyze_button = QPushButton("Analyze & Generate Insights")
+        self.analyze_button.clicked.connect(self.run_analysis)
+
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(self.business_label)
+        input_layout.addWidget(self.business_input)
+        input_layout.addWidget(self.analyze_button)
+        self.main_layout.addLayout(input_layout)
+
+        # Insights Section
+        self.insights_box = QTextEdit()
+        self.insights_box.setReadOnly(True)
+        self.main_layout.addWidget(QLabel("📄 Key Insights:"))
+        self.main_layout.addWidget(self.insights_box)
+
+        # AI Question Section
+        self.ai_question_input = QLineEdit()
+        self.ai_question_input.setPlaceholderText("Ask AI a Business-Specific Question")
+        self.ai_answer_button = QPushButton("Ask AI")
+        self.ai_answer_button.clicked.connect(self.ask_ai)
+
+        ai_layout = QHBoxLayout()
+        ai_layout.addWidget(self.ai_question_input)
+        ai_layout.addWidget(self.ai_answer_button)
+        self.main_layout.addLayout(ai_layout)
+
+        # Dashboard Visualization
+        self.dashboard_canvas = DashboardCanvas(self, width=10, height=6)
+        self.main_layout.addWidget(QLabel("📈 Dashboard Visualization:"))
+        self.main_layout.addWidget(self.dashboard_canvas)
 
         # Footer
-        footer = QLabel("© 2023 Business Analytics Inc. | All Rights Reserved")
+        footer = QLabel("© 2025 Business Analytics Inc. | All Rights Reserved")
         footer.setFont(QFont("Arial", 10))
         footer.setStyleSheet("color: #777777;")
+        self.main_layout.addWidget(footer)
 
-        # Layout
-        layout = QVBoxLayout()
-        layout.addWidget(header)
-        layout.addWidget(self.business_label)
-        layout.addWidget(self.business_input)
-        layout.addWidget(self.analyze_button)
-        layout.addWidget(QLabel("📄 Key Insights:"))
-        layout.addWidget(self.insights_box)
-        layout.addWidget(self.ai_question_input)
-        layout.addWidget(self.ai_answer_button)
-        layout.addWidget(QLabel("📈 Dashboard Visualization:"))
-        layout.addWidget(self.dashboard_canvas)
-        layout.addWidget(footer)
-
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        # Set size policies for responsiveness
+        self.insights_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.dashboard_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def create_sample_data(self):
         data = {
@@ -233,28 +248,35 @@ class BusinessAnalyzer(QMainWindow):
         axes[0, 0].set_ylabel("")
 
         # Scatter Plot - Spending vs Purchase Frequency
-        sns.scatterplot(x=df["purchase_frequency"], y=df["total_spent"], hue=df["segment_label"], palette="Set2", s=100, ax=axes[0, 1])
+        sns.scatterplot(x=df["purchase_frequency"], y=df["total_spent"], hue=df["segment_label"], palette="Set2", s=80, ax=axes[0, 1])
         axes[0, 1].set_title("Spending vs Purchase Frequency", fontsize=12, fontweight='bold')
-        axes[0, 1].set_xlabel("Monthly Purchases", fontsize=10)
-        axes[0, 1].set_ylabel("Total Spent (₹)", fontsize=10)
+        axes[0, 1].set_xlabel("Purchase Frequency")
+        axes[0, 1].set_ylabel("Total Spent")
 
-        # Bar Chart - Locations
-        sns.countplot(x=df["location"], palette="coolwarm", ax=axes[0, 2])
-        axes[0, 2].set_title("Customer Location Distribution", fontsize=12, fontweight='bold')
+        # Bar Plot - Avg Basket Size by Segment
+        df.groupby("segment_label")["avg_basket_size"].mean().plot.bar(color='teal', ax=axes[0, 2])
+        axes[0, 2].set_title("Avg Basket Size by Segment", fontsize=12, fontweight='bold')
+        axes[0, 2].set_ylabel("Avg Basket Size")
+        axes[0, 2].tick_params(axis='x', rotation=20)
 
-        # Histogram - Age
-        sns.histplot(df["customer_age"], bins=5, kde=True, color="purple", ax=axes[1, 0])
-        axes[1, 0].set_title("Customer Age Distribution", fontsize=12, fontweight='bold')
+        # Line Plot - Age vs Spending Trend
+        df_sorted = df.sort_values("customer_age")
+        axes[1, 0].plot(df_sorted["customer_age"], df_sorted["total_spent"], marker='o', color='purple')
+        axes[1, 0].set_title("Age vs Spending Trend", fontsize=12, fontweight='bold')
+        axes[1, 0].set_xlabel("Customer Age")
+        axes[1, 0].set_ylabel("Total Spent")
 
-        # Histogram - Basket Size
-        sns.histplot(df["avg_basket_size"], bins=5, kde=True, color="green", ax=axes[1, 1])
-        axes[1, 1].set_title("Average Basket Size Distribution", fontsize=12, fontweight='bold')
+        # Histogram - Review Ratings
+        sns.histplot(df["last_review_rating"], bins=5, kde=False, color='coral', ax=axes[1, 1])
+        axes[1, 1].set_title("Distribution of Review Ratings", fontsize=12, fontweight='bold')
+        axes[1, 1].set_xlabel("Review Rating")
+        axes[1, 1].set_ylabel("Count")
 
-        # Bar Chart - Review Ratings
-        sns.countplot(x=df["last_review_rating"], palette="magma", ax=axes[1, 2])
-        axes[1, 2].set_title("Customer Satisfaction Ratings", fontsize=12, fontweight='bold')
+        # Empty plot for spacing
+        axes[1, 2].axis('off')
 
         self.dashboard_canvas.draw()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
